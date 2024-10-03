@@ -5,7 +5,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
-import isodate  # For parsing ISO 8601 duration
+import isodate
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -13,12 +14,21 @@ CORS(app)
 load_dotenv()
 
 DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = r"postgresql://postgres:postgres@db:5432/postgres"
 API_KEY = os.getenv('GAPI_KEY')
 youtube = build('youtube', 'v3', developerKey=API_KEY)
+
+
+def get_channelId_from_name(channel_name):
+    url = f"https://www.googleapis.com/youtube/v3/channels?key={API_KEY}&forUsername={channel_name}&part=id"
+    req = requests.request(url=url)
+    print(req.json)
+
 
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL)
     return conn
+
 
 def initialize_db():
     conn = get_db_connection()
@@ -42,6 +52,7 @@ def initialize_db():
     cur.close()
     conn.close()
 
+
 def fetch_channel_data(channel_id):
     request = youtube.channels().list(
         part='statistics,snippet',
@@ -49,6 +60,7 @@ def fetch_channel_data(channel_id):
     )
     response = request.execute()
     return response
+
 
 def fetch_latest_videos(channel_id):
     request = youtube.search().list(
@@ -61,6 +73,7 @@ def fetch_latest_videos(channel_id):
     response = request.execute()
     return response['items']
 
+
 def fetch_video_statistics(video_ids):
     request = youtube.videos().list(
         part='statistics,contentDetails',
@@ -69,16 +82,20 @@ def fetch_video_statistics(video_ids):
     response = request.execute()
     return response['items']
 
+
 def calculate_metrics(videos):
-    view_counts = [int(video['statistics']['viewCount']) for video in videos if 'viewCount' in video['statistics']]
+    view_counts = [int(video['statistics']['viewCount'])
+                   for video in videos if 'viewCount' in video['statistics']]
     if not view_counts:
         median_viewership = 0
     else:
         sorted_views = sorted(view_counts)
         mid = len(sorted_views) // 2
-        median_viewership = (sorted_views[mid] if len(sorted_views) % 2 == 1 else (sorted_views[mid - 1] + sorted_views[mid]) // 2)
+        median_viewership = (sorted_views[mid] if len(sorted_views) % 2 == 1 else (
+            sorted_views[mid - 1] + sorted_views[mid]) // 2)
 
-    short_videos_count = sum(1 for video in videos if isodate.parse_duration(video['contentDetails']['duration']).total_seconds() <= 60)
+    short_videos_count = sum(1 for video in videos if isodate.parse_duration(
+        video['contentDetails']['duration']).total_seconds() <= 60)
     long_videos_count = len(videos) - short_videos_count
     upload_frequency = len(videos)
 
@@ -88,6 +105,7 @@ def calculate_metrics(videos):
         'long_videos_count': long_videos_count,
         'upload_frequency': upload_frequency
     }
+
 
 @app.route('/api/channels', methods=['POST'])
 def add_channel():
@@ -127,10 +145,13 @@ def add_channel():
 
         for video in videos:
             video_id = video['id']
-            title = next(v['snippet']['title'] for v in video_items if v['id']['videoId'] == video_id)
-            published_at = next(v['snippet']['publishedAt'] for v in video_items if v['id']['videoId'] == video_id)
+            title = next(v['snippet']['title']
+                         for v in video_items if v['id']['videoId'] == video_id)
+            published_at = next(v['snippet']['publishedAt']
+                                for v in video_items if v['id']['videoId'] == video_id)
             duration_iso = video['contentDetails']['duration']
-            duration_seconds = int(isodate.parse_duration(duration_iso).total_seconds())  # Convert ISO 8601 to seconds
+            duration_seconds = int(isodate.parse_duration(
+                duration_iso).total_seconds())
             view_count = int(video['statistics'].get('viewCount', 0))
             likes = int(video['statistics'].get('likeCount', 0))
             comments = int(video['statistics'].get('commentCount', 0))
@@ -142,7 +163,6 @@ def add_channel():
                 )
             )
 
-        # Calculate metrics
         metrics = calculate_metrics(videos)
 
         cur.execute(
@@ -162,6 +182,7 @@ def add_channel():
         return jsonify({'name': channel_info['snippet']['title']}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     initialize_db()
