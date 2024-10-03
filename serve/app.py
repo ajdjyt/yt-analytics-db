@@ -18,10 +18,8 @@ API_KEY = os.getenv('GAPI_KEY')
 youtube = build('youtube', 'v3', developerKey=API_KEY)
 
 
-# Updated to use googleapiclient for API calls
 def get_channelId_from_name(channel_name):
     try:
-        # Using the YouTube Data API to fetch channel ID by username
         request = youtube.channels().list(
             part="id",
             forUsername=channel_name
@@ -117,6 +115,99 @@ def calculate_metrics(videos):
     }
 
 
+def get_channel_summary(channel_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            c.channel_name,
+            COUNT(v.video_id) AS total_videos,
+            SUM(v.view_count) AS total_views,
+            SUM(v.likes) AS total_likes
+        FROM
+            Channel c
+        JOIN
+            Videos v ON c.channel_id = v.channel_id
+        WHERE
+            c.channel_id = %s
+        GROUP BY
+            c.channel_name;
+    """
+
+    cur.execute(query, (channel_id,))
+    summary = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if summary:
+        return {
+            'channel_name': summary[0],
+            'total_videos': summary[1],
+            'total_views': summary[2],
+            'total_likes': summary[3]
+        }
+    return None
+
+
+def get_popular_videos(min_views):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            v.video_id,
+            v.title,
+            v.view_count,
+            v.likes,
+            c.channel_name
+        FROM
+            Videos v
+        JOIN
+            Channel c ON v.channel_id = c.channel_id
+        WHERE
+            v.view_count > %s
+        ORDER BY
+            v.view_count DESC;
+    """
+
+    cur.execute(query, (min_views,))
+    videos = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return [{'video_id': row[0], 'title': row[1], 'view_count': row[2], 'likes': row[3], 'channel_name': row[4]} for row in videos]
+
+
+def get_video_performance(video_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            v.title,
+            vs.date_checked,
+            vs.view_count,
+            vs.likes,
+            vs.comments
+        FROM
+            Video_Stats vs
+        JOIN
+            Videos v ON vs.video_id = v.video_id
+        WHERE
+            v.video_id = %s
+        ORDER BY
+            vs.date_checked ASC;
+    """
+
+    cur.execute(query, (video_id,))
+    performance = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return [{'title': row[0], 'date_checked': row[1], 'view_count': row[2], 'likes': row[3], 'comments': row[4]} for row in performance]
+
+
 @app.route('/api/channels', methods=['POST'])
 def add_channel():
     data = request.json
@@ -124,12 +215,12 @@ def add_channel():
     if 'channelName' not in data:
         return jsonify({'error': 'channelName is required'}), 400
 
-    # Step 1: Get Channel ID from the channelName
+
     channel_id = get_channelId_from_name(data['channelName'])
     if not channel_id:
         return jsonify({'error': 'Channel not found'}), 404
 
-    # Step 2: Fetch Channel Data using the channel ID
+
     channel_data = fetch_channel_data(channel_id)
 
     if 'items' not in channel_data or not channel_data['items']:
@@ -141,7 +232,7 @@ def add_channel():
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Step 3: Insert the channel information into the database
+
         cur.execute(
             sql.SQL("INSERT INTO Channel (channel_id, channel_name, total_videos, subscribers) VALUES (%s, %s, %s, %s) ON CONFLICT (channel_id) DO NOTHING;"),
             (
@@ -152,13 +243,13 @@ def add_channel():
             )
         )
 
-        # Step 4: Fetch and process the latest videos
+
         video_items = fetch_latest_videos(channel_id)
         video_ids = [video['id']['videoId'] for video in video_items]
 
         videos = fetch_video_statistics(video_ids)
 
-        # Step 5: Insert video data into the database
+
         for video in videos:
             video_id = video['id']
             title = next(v['snippet']['title']
@@ -179,7 +270,7 @@ def add_channel():
                 )
             )
 
-        # Step 6: Calculate and store metrics
+
         metrics = calculate_metrics(videos)
 
         cur.execute(
@@ -198,6 +289,41 @@ def add_channel():
         conn.close()
 
         return jsonify({'name': channel_info['snippet']['title']}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
+@app.route('/api/channel/<channel_id>/summary', methods=['GET'])
+def get_channel_summary_route(channel_id):
+    try:
+        summary = get_channel_summary(channel_id)
+        if summary:
+            return jsonify(summary), 200
+        else:
+            return jsonify({'error': 'Channel not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/videos/popular', methods=['GET'])
+def get_popular_videos_route():
+    min_views = request.args.get('min_views', default=10000, type=int)
+    try:
+        popular_videos = get_popular_videos(min_views)
+        return jsonify(popular_videos), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/video/<video_id>/performance', methods=['GET'])
+def get_video_performance_route(video_id):
+    try:
+        performance_data = get_video_performance(video_id)
+        if performance_data:
+            return jsonify(performance_data), 200
+        else:
+            return jsonify({'error': 'Video not found'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
