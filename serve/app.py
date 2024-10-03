@@ -20,17 +20,31 @@ youtube = build('youtube', 'v3', developerKey=API_KEY)
 
 def get_channelId_from_name(channel_name):
     try:
-        request = youtube.channels().list(
-            part="id",
-            forUsername=channel_name
-        )
-        response = request.execute()
-        if 'items' in response and len(response['items']) > 0:
-            return response['items'][0]['id']
+        # If the name starts with @, treat it as a handle
+        if channel_name.startswith('@'):
+            request = youtube.search().list(
+                part="snippet",
+                q=channel_name,
+                type="channel",
+                maxResults=1
+            )
+            response = request.execute()
+            if 'items' in response and len(response['items']) > 0:
+                return response['items'][0]['snippet']['channelId']
+        else:
+            # Old style username lookup
+            request = youtube.channels().list(
+                part="id",
+                forUsername=channel_name
+            )
+            response = request.execute()
+            if 'items' in response and len(response['items']) > 0:
+                return response['items'][0]['id']
         return None
     except Exception as e:
         print(f"Error fetching channel ID: {e}")
         return None
+
 
 
 def get_db_connection():
@@ -294,9 +308,17 @@ def add_channel():
 
 
 
-@app.route('/api/channel/<channel_id>/summary', methods=['GET'])
-def get_channel_summary_route(channel_id):
+@app.route('/api/channel/<channel_identifier>/summary', methods=['GET'])
+def get_channel_summary_route(channel_identifier):
     try:
+        if len(channel_identifier) == 24:
+            channel_id = channel_identifier
+        else:
+            channel_id = get_channelId_from_name(channel_identifier)
+
+        if not channel_id:
+            return jsonify({'error': 'Channel not found'}), 404
+
         summary = get_channel_summary(channel_id)
         if summary:
             return jsonify(summary), 200
