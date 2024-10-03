@@ -308,7 +308,7 @@ def add_channel():
 
 
 
-@app.route('/api/channel/<channel_identifier>/summary', methods=['GET'])
+@app.route('/api/channels/<channel_identifier>/summary', methods=['GET'])
 def get_channel_summary_route(channel_identifier):
     try:
         if len(channel_identifier) == 24:
@@ -338,7 +338,7 @@ def get_popular_videos_route():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/video/<video_id>/performance', methods=['GET'])
+@app.route('/api/videos/<video_id>/performance', methods=['GET'])
 def get_video_performance_route(video_id):
     try:
         performance_data = get_video_performance(video_id)
