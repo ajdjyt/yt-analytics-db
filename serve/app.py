@@ -6,7 +6,6 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 import isodate
-import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -14,15 +13,26 @@ CORS(app)
 load_dotenv()
 
 DATABASE_URL = os.getenv('DATABASE_URL')
-DATABASE_URL = r"postgresql://postgres:postgres@db:5432/postgres"
+# DATABASE_URL = r"postgresql://postgres:postgres@db:5432/postgres"
 API_KEY = os.getenv('GAPI_KEY')
 youtube = build('youtube', 'v3', developerKey=API_KEY)
 
 
+# Updated to use googleapiclient for API calls
 def get_channelId_from_name(channel_name):
-    url = f"https://www.googleapis.com/youtube/v3/channels?key={API_KEY}&forUsername={channel_name}&part=id"
-    req = requests.request(url=url)
-    print(req.json)
+    try:
+        # Using the YouTube Data API to fetch channel ID by username
+        request = youtube.channels().list(
+            part="id",
+            forUsername=channel_name
+        )
+        response = request.execute()
+        if 'items' in response and len(response['items']) > 0:
+            return response['items'][0]['id']
+        return None
+    except Exception as e:
+        print(f"Error fetching channel ID: {e}")
+        return None
 
 
 def get_db_connection():
@@ -114,10 +124,12 @@ def add_channel():
     if 'channelName' not in data:
         return jsonify({'error': 'channelName is required'}), 400
 
-    # if 'channelId' not in data:
-        # return jsonify({'error': 'channelId is required'}), 400
+    # Step 1: Get Channel ID from the channelName
+    channel_id = get_channelId_from_name(data['channelName'])
+    if not channel_id:
+        return jsonify({'error': 'Channel not found'}), 404
 
-    channel_id = get_channelId_from_name('channelName')
+    # Step 2: Fetch Channel Data using the channel ID
     channel_data = fetch_channel_data(channel_id)
 
     if 'items' not in channel_data or not channel_data['items']:
@@ -129,6 +141,7 @@ def add_channel():
         conn = get_db_connection()
         cur = conn.cursor()
 
+        # Step 3: Insert the channel information into the database
         cur.execute(
             sql.SQL("INSERT INTO Channel (channel_id, channel_name, total_videos, subscribers) VALUES (%s, %s, %s, %s) ON CONFLICT (channel_id) DO NOTHING;"),
             (
@@ -139,11 +152,13 @@ def add_channel():
             )
         )
 
+        # Step 4: Fetch and process the latest videos
         video_items = fetch_latest_videos(channel_id)
         video_ids = [video['id']['videoId'] for video in video_items]
 
         videos = fetch_video_statistics(video_ids)
 
+        # Step 5: Insert video data into the database
         for video in videos:
             video_id = video['id']
             title = next(v['snippet']['title']
@@ -164,6 +179,7 @@ def add_channel():
                 )
             )
 
+        # Step 6: Calculate and store metrics
         metrics = calculate_metrics(videos)
 
         cur.execute(
@@ -180,6 +196,7 @@ def add_channel():
         conn.commit()
         cur.close()
         conn.close()
+
         return jsonify({'name': channel_info['snippet']['title']}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
