@@ -111,10 +111,13 @@ def calculate_metrics(videos):
 def add_channel():
     data = request.json
 
-    if 'channelId' not in data:
-        return jsonify({'error': 'channelId is required'}), 400
+    if 'channelName' not in data:
+        return jsonify({'error': 'channelName is required'}), 400
 
-    channel_id = data['channelId']
+    # if 'channelId' not in data:
+        # return jsonify({'error': 'channelId is required'}), 400
+
+    channel_id = get_channelId_from_name('channelName')
     channel_data = fetch_channel_data(channel_id)
 
     if 'items' not in channel_data or not channel_data['items']:
@@ -136,11 +139,9 @@ def add_channel():
             )
         )
 
-        # Fetch the latest 10 videos for the channel
         video_items = fetch_latest_videos(channel_id)
         video_ids = [video['id']['videoId'] for video in video_items]
 
-        # Fetch detailed statistics for the videos
         videos = fetch_video_statistics(video_ids)
 
         for video in videos:
