@@ -20,7 +20,7 @@
 	};
 </script>
 
-<main>
+<main class="bg-slate-800">
 	<Hero />
 </main>
 
