@@ -20,7 +20,7 @@ span {
 	background-image: linear-gradient(to right, grey 1px, transparent 1px),
 		linear-gradient(to bottom, grey 1px, transparent 1px);
 }
-
+/* 
 button,
 .button {
 	border-radius: 8px;
@@ -36,12 +36,12 @@ button,
 
 button:hover {
 	border-color: #646cff;
-}
+} */
 
-button:focus,
+/* button:focus,
 button:focus-visible {
 	outline: 4px auto -webkit-focus-ring-color;
-}
+} */
 
 .specialBtn {
 	border-color: #646cff;

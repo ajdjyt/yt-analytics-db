@@ -1,13 +1,9 @@
 <script>
 	import '../app.css';
+	import Footer from '../components/Footer.svelte';
+	import Header from '../components/Header.svelte';
 </script>
 
-<nav class="p-4 bg-gray-800 text-white">
-	<h1 class="text-xl">YouTube Analytics Dashboard</h1>
-</nav>
-
+<Header />
 <slot />
-
-<footer class="p-4 bg-gray-800 text-white mt-4">
-	<p>&copy; 2024 My YouTube Dashboard</p>
-</footer>
+<Footer />

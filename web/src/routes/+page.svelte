@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import axios from 'axios';
+	import Hero from '../components/Hero.svelte';
 
 	let channelName = '';
 	let channelData: any = null;
@@ -19,7 +20,11 @@
 	};
 </script>
 
-<main class="p-6">
+<main>
+	<Hero />
+</main>
+
+<!-- <main class="p-6">
 	<h1 class="text-3xl font-bold mb-4">YouTube Channel Analyzer</h1>
 
 	<div class="mb-4">
@@ -44,4 +49,4 @@
 			<p>Channel added successfully!</p>
 		</div>
 	{/if}
-</main>
+</main> -->
